@@ -32,8 +32,8 @@ async def download_file_from_url(url: str) -> Tuple[bytes, str]:
 
 @app.post("/extract")
 async def extract(
-    file: Optional[UploadFile] = File(None),
-    file_url: Optional[str] = Form(None)
+    file_url: Optional[str] = None,
+    file: Optional[UploadFile] = File(None)
 ):
     try:
         # Handle file URL (from WXO)
