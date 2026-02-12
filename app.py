@@ -1,21 +1,63 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.responses import JSONResponse
+from typing import Optional, Tuple
 import pdfplumber
 import pytesseract
 from PIL import Image
 import tempfile
 import os
+import httpx
+from urllib.parse import urlparse
 
 app = FastAPI()
 
-@app.post("/extract")
-async def extract(file: UploadFile = File(...)):
-    try:
-        suffix = os.path.splitext(file.filename)[1].lower()
+async def download_file_from_url(url: str) -> Tuple[bytes, str]:
+    """Download file from URL and return content and filename"""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        
+        # Extract filename from URL
+        parsed_url = urlparse(url)
+        filename = os.path.basename(parsed_url.path)
+        if not filename or '.' not in filename:
+            # Try to get from content-disposition header
+            content_disp = response.headers.get('content-disposition', '')
+            if 'filename=' in content_disp:
+                filename = content_disp.split('filename=')[1].strip('"')
+            else:
+                filename = 'document.pdf'  # default
+        
+        return response.content, filename
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
-            temp.write(await file.read())
-            temp_path = temp.name
+@app.post("/extract")
+async def extract(
+    file: Optional[UploadFile] = File(None),
+    file_url: Optional[str] = Form(None)
+):
+    try:
+        # Handle file URL (from WXO)
+        if file_url:
+            file_content, filename = await download_file_from_url(file_url)
+            suffix = os.path.splitext(filename)[1].lower()
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+                temp.write(file_content)
+                temp_path = temp.name
+        
+        # Handle direct file upload
+        elif file:
+            suffix = os.path.splitext(file.filename)[1].lower()
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp:
+                temp.write(await file.read())
+                temp_path = temp.name
+        
+        else:
+            return JSONResponse(
+                content={"error": "Either file or file_url must be provided"},
+                status_code=400
+            )
 
         extracted_text = ""
 
