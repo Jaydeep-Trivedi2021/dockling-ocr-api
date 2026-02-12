@@ -4,3 +4,4 @@ pdfplumber
 pytesseract
 python-multipart
 Pillow
+httpx
