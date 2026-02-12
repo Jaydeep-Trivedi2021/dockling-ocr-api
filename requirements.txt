@@ -1,4 +1,6 @@
 fastapi
 uvicorn
-docling
+pdfplumber
+pytesseract
 python-multipart
+Pillow
