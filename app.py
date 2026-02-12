@@ -13,20 +13,27 @@ app = FastAPI()
 
 async def download_file_from_url(url: str) -> Tuple[bytes, str]:
     """Download file from URL and return content and filename"""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        # For S3 pre-signed URLs, we need to make a simple GET request
         response = await client.get(url)
         response.raise_for_status()
         
-        # Extract filename from URL
+        # Extract filename from URL path (before query parameters)
         parsed_url = urlparse(url)
-        filename = os.path.basename(parsed_url.path)
-        if not filename or '.' not in filename:
-            # Try to get from content-disposition header
-            content_disp = response.headers.get('content-disposition', '')
-            if 'filename=' in content_disp:
-                filename = content_disp.split('filename=')[1].strip('"')
+        path_parts = parsed_url.path.split('/')
+        filename = path_parts[-1] if path_parts else 'document'
+        
+        # If no extension, try to get from content-type
+        if '.' not in filename:
+            content_type = response.headers.get('content-type', '')
+            if 'pdf' in content_type:
+                filename += '.pdf'
+            elif 'jpeg' in content_type or 'jpg' in content_type:
+                filename += '.jpg'
+            elif 'png' in content_type:
+                filename += '.png'
             else:
-                filename = 'document.pdf'  # default
+                filename += '.pdf'  # default
         
         return response.content, filename
 
